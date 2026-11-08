@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>リアルタイム質問Q&Aボード</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Arial, sans-serif; }
+    body { background-color: #f4f7f9; color: #333; overflow: hidden; height: 100vh; position: relative; }
+    .page { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: flex; transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1); }
+    
+    #page-qa { transform: translateY(0); }
+    body.show-qr #page-qa { transform: translateY(-100vh); }
+    .sidebar { width: 28%; background: linear-gradient(135deg, #00b4db, #0083b0); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; box-shadow: 4px 0 15px rgba(0,0,0,0.1); position: relative; }
+    .digital-clock { font-size: 5.5rem; font-weight: 900; font-family: 'Arial Black', Impact, sans-serif; letter-spacing: -2px; margin-bottom: 25px; text-shadow: 0 6px 15px rgba(0,0,0,0.25); color: #fff; background: rgba(0, 0, 0, 0.15); padding: 5px 0; border-radius: 20px; width: 95%; display: inline-block; text-align: center; line-height: 1.1; }
+    .clock-colon { animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    .sidebar h1 { font-size: 2rem; margin-bottom: 10px; font-weight: bold; }
+    .sidebar p { font-size: 1.1rem; margin-bottom: 30px; opacity: 0.9; width: 100%; white-space: nowrap; }
+    .sidebar .qr-box { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 12px 30px rgba(0,0,0,0.2); width: 85%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+    .sidebar .qr-box img { width: 100%; height: 100%; object-fit: contain; }
+    .main-content { width: 72%; height: 100vh; padding: 40px; display: flex; flex-direction: column; gap: 30px; overflow-y: auto; }
+    .list-title { font-size: 1.6rem; color: #444; display: flex; align-items: center; gap: 10px; font-weight: bold; }
+    .list-title.ranking::before { content: "👑"; }
+    .list-title.new-arrival::before { content: "⏱️"; }
+    .ranking-section { flex-shrink: 0; }
+    .question-card { background: white; border-radius: 16px; padding: 22px 25px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border-left: 6px solid #ffcc00; transition: all 0.4s ease; }
+    .question-text { font-size: 1.4rem; font-weight: 500; line-height: 1.5; color: #2c3e50; padding-right: 20px; word-break: break-all; }
+    .vote-badge { background-color: #e8f8f5; color: #1abc9c; padding: 10px 18px; border-radius: 30px; font-size: 1.2rem; font-weight: bold; display: flex; align-items: center; gap: 6px; min-width: 80px; justify-content: center; }
+    .vote-badge::before { content: "👍"; }
+    .new-section { flex-grow: 1; border-top: 2px dashed #d0dbe5; padding-top: 25px; }
+    .new-list-item { background: rgba(255, 255, 255, 0.7); border-radius: 10px; padding: 14px 20px; margin-bottom: 10px; font-size: 1.1rem; color: #555; border-left: 4px solid #bdc3c7; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+    .new-badge { font-size: 0.8rem; background: #7f8c8d; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold; flex-shrink: 0; }
+    .flash-update { animation: flashHighlight 1.5s ease-out; }
+    @keyframes flashHighlight {
+      0% { background-color: #fffae6; transform: scale(1.02); box-shadow: 0 0 20px rgba(255, 204, 0, 0.5); }
+      100% { background-color: white; transform: scale(1); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+    }
+
+    #page-large-qr { transform: translateY(100vh); background: linear-gradient(135deg, #00b4db, #0083b0); flex-direction: row; align-items: center; justify-content: space-between; color: white; padding: 0 6%; }
+    body.show-qr #page-large-qr { transform: translateY(0); }
+    .large-qr-text-zone { width: 45%; text-align: left; display: flex; flex-direction: column; gap: 20px; }
+    .large-qr-title { font-size: 4rem; font-weight: bold; line-height: 1.2; text-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .large-qr-subtitle { font-size: 2rem; opacity: 0.9; line-height: 1.5; }
+    .large-qr-container { background: white; padding: 30px; border-radius: 40px; box-shadow: 0 25px 70px rgba(0,0,0,0.35); width: 82vh; height: 82vh; display: flex; align-items: center; justify-content: center; }
+    .large-qr-container img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  </style>
+</head>
+<body>
+
+  <!-- 1ページ目：Q&Aメインボード -->
+  <div id="page-qa" class="page">
+    <div class="sidebar">
+      <div class="digital-clock" id="clock">00<span class="clock-colon">:</span>00</div>
+      <h1>質問＆投票</h1>
+      <p>スマホでQRを読み取って参加しよう！</p>
+      <div class="qr-box"><img src="cyber-qr-code-4board.png" alt="QRコード"></div>
+    </div>
+    <div class="main-content">
+      <div class="ranking-section">
+        <div class="list-title ranking">注目の質問ランキング</div>
+        <div id="ranking-container" style="margin-top: 15px;">
+          <div class="question-card"><div class="question-text">データを読み込んでいます...</div></div>
+        </div>
+      </div>
+      <div class="new-section">
+        <div class="list-title new-arrival">届いたばかりの質問（まだ投票なし）</div>
+        <div id="new-container" style="margin-top: 15px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2ページ目：巨大QRコード画面 -->
+  <div id="page-large-qr" class="page">
+    <div class="large-qr-text-zone">
+      <div class="large-qr-title">質問＆投票<br>受付中！</div>
+      <div class="large-qr-subtitle">スマートフォンのカメラでQRコードを読み取ってご参加ください。</div>
+    </div>
+    <div class="large-qr-container"><img src="qr.png" alt="QRコード"></div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwgnmlLBbN6nQBzO7VpI9kMqnF6n6IVTtnKYvVcjqgiG9GpueVkkxQPfcmmLaSBK0sf/exec';
+
+    // スペースキー切り替え
+    window.addEventListener('keydown', function(event) {
+      if (event.code === 'Space' || event.keyCode === 32) {
+        event.preventDefault(); 
+        document.body.classList.toggle('show-qr');
+      }
+    });
+
+    // 時計
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('clock').innerHTML = hours + '<span class="clock-colon">:</span>' + minutes;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    let previousDataString = "";
+
+    // データ読み込み
+    async function fetchQuestions() {
+      try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
+        const currentDataString = JSON.stringify(data);
+        
+        if (previousDataString && currentDataString === previousDataString) {
+          return; 
+        }
+
+        const rankingContainer = document.getElementById('ranking-container');
+        const newContainer = document.getElementById('new-container');
+        rankingContainer.innerHTML = ''; 
+        newContainer.innerHTML = ''; 
+
+        if (data.length === 0) {
+          rankingContainer.innerHTML = '<div class="question-card"><div class="question-text" style="color:#aaa;">投票（いいね）がついた「注目の質問」がここに上がってきます！</div></div>';
+          newContainer.innerHTML = '<div style="color:#aaa; font-style:italic; padding-left:10px;">新着質問はありません。</div>';
+          previousDataString = currentDataString;
+          return;
+        }
+
+        const rankedItems = data.filter(item => item.votes >= 1); 
+        const unrankedItems = data.filter(item => item.votes === 0); 
+        const prevData = previousDataString ? JSON.parse(previousDataString) : [];
+
+        // 上段
+        if (rankedItems.length === 0) {
+          rankingContainer.innerHTML = '<div class="question-card"><div class="question-text" style="color:#aaa;">投票（いいね）がついた「注目の質問」がここに上がってきます！</div></div>';
+        } else {
+          rankedItems.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'question-card';
+            const prevItem = prevData.find(p => p.question === item.question);
+            if (previousDataString && (!prevItem || item.votes > prevItem.votes)) {
+              card.classList.add('flash-update'); 
+            }
+            card.innerHTML = '<div class="question-text">' + escapeHTML(item.question) + '</div><div class="vote-badge">' + item.votes + '</div>';
+            rankingContainer.appendChild(card);
+          });
+        }
+
+        // 下段
+        if (unrankedItems.length === 0) {
+          newContainer.innerHTML = '<div style="color:#aaa; font-style:italic; padding-left:10px;">すべての質問に投票がされました！</div>';
+        } else {
+          unrankedItems.forEach(item => {
+            const listItem = document.createElement('div');
+            const prevItem = prevData.find(p => p.question === item.question);
+            listItem.className = 'new-list-item' + (previousDataString && !prevItem ? ' flash-update' : '');
+            listItem.innerHTML = '<div style="font-weight:500; word-break:break-all; padding-right:15px;">' + escapeHTML(item.question) + '</div><div class="new-badge">新着</div>';
+            newContainer.appendChild(listItem);
+          });
+        }
+        previousDataString = currentDataString;
+      } catch (error) {
+        console.error('データの取得に失敗しました:', error);
+      }
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    fetchQuestions();
+    setInterval(fetchQuestions, 4000);
+  </script>
+</body>
+</html>
